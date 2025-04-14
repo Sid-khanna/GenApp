@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Biographer</title>
+</head>
+<body>
+    <h1>Answer the questions below:</h1>
+    <form method="post">
+        {% for q in questions %}
+            <label>{{ q }}</label><br>
+            <textarea name="q{{ loop.index0 }}" rows="3" cols="60" required></textarea><br><br>
+        {% endfor %}
+        <button type="submit">Generate My Story</button>
+    </form>
+</body>
+</html>
