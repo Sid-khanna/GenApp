@@ -1,23 +1,22 @@
-import os
-import json
 from flask import Flask, render_template, request, redirect, url_for, session
 from openai import OpenAI
+import os
 from dotenv import load_dotenv
 
+# === Load environment variables ===
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret')  # For session use
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret")  # Needed for session
 
 # === OpenRouter setup ===
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.environ.get("OPENROUTER_API_KEY"),
+    api_key=os.getenv("OPENROUTER_API_KEY"),
     default_headers={
         "HTTP-Referer": "https://your-project.com",
         "X-Title": "AI Character Creator",
-    }
-)
+    })
 
 # === Questions ===
 personality_questions = [
@@ -42,21 +41,19 @@ general_questions = [
 ]
 
 @app.route('/', methods=['GET', 'POST'])
-def form_page():
+def home():
     if request.method == 'POST':
         mode = request.form.get('mode')
         questions = personality_questions if mode == 'self' else general_questions
         answers = [request.form.get(f'q{i}') for i in range(len(questions))]
         responses = dict(zip(questions, answers))
-
         style = extract_style(responses)
 
-        # Store in session
-        session['mode'] = mode
         session['responses'] = responses
         session['style'] = style
+        session['mode'] = mode
 
-        return redirect(url_for('story_preferences'))
+        return redirect(url_for('preferences'))
 
     return render_template('form.html', mode_select=True)
 
@@ -66,56 +63,51 @@ def show_questions():
     questions = personality_questions if mode == 'self' else general_questions
     return render_template('form.html', questions=questions, mode=mode)
 
-@app.route('/story_preferences', methods=['GET', 'POST'])
-def story_preferences():
-    genre_options = get_genre_options()
+@app.route('/preferences', methods=['GET', 'POST'])
+def preferences():
+    genre_options = ["Fantasy", "Modern", "Sci-Fi", "Historical", "Dystopian", "Slice of Life"]
     tone_options = ["hopeful", "dark", "witty", "poetic", "melancholic", "adventurous", "introspective"]
 
     if request.method == 'POST':
         genre = request.form.get('genre')
         tone = request.form.get('tone')
 
-        # Retrieve from session
-        responses = session.get('responses')
-        style = session.get('style')
-        mode = session.get('mode')
+        responses = session.get("responses")
+        style = session.get("style")
+        mode = session.get("mode")
 
         if not responses or not style or not mode:
-            return redirect(url_for('form_page'))
+            return redirect(url_for('home'))
 
-        character_profile, plot = generate_character_and_plot(responses, style, genre, tone, mode)
+        profile, plot = generate_character_and_plot(responses, style, genre, tone, mode)
 
-        # Store result
-        session['profile'] = character_profile
+        session['profile'] = profile
         session['plot'] = plot
         session['genre'] = genre
 
-        return render_template('character_preview.html', profile=character_profile, plot=plot)
+        return render_template('preview.html', profile=profile, plot=plot)
 
     return render_template('preferences.html', genre_options=genre_options, tone_options=tone_options)
 
-@app.route('/generate_story', methods=['POST'])
+@app.route('/generate', methods=['POST'])
 def generate_story():
-    profile = session.get('profile')
-    plot = session.get('plot')
-    genre = session.get('genre')
+    profile = session.get("profile")
+    plot = session.get("plot")
+    genre = session.get("genre")
 
     if not profile or not plot or not genre:
-        return redirect(url_for('form_page'))
+        return redirect(url_for('home'))
 
-    blurb = generate_blurb(profile, plot, genre)
-    return render_template('result.html', profile=profile, plot=plot, blurb=blurb)
+    story = generate_blurb(profile, plot, genre)
+    return render_template('result.html', story=story, profile=profile, plot=plot)
 
-# === Utils ===
-
-def get_genre_options():
-    return ["Fantasy", "Modern", "Sci-Fi", "Historical", "Dystopian", "Slice of Life"]
+# === AI logic ===
 
 def extract_style(responses):
     formatted = "\n".join([f"Q: {q}\nA: {a}" for q, a in responses.items()])
     prompt = f"""
     Analyze the following answers and describe the user's tone and emotional style.
-    Focus on mood, sentence complexity, use of imagery or metaphor, and emotional depth.
+    Focus on sentence complexity, emotional depth, figurative language, and mood.
 
     {formatted}
     """
@@ -128,24 +120,22 @@ def extract_style(responses):
         )
         return completion.choices[0].message.content.strip()
     except Exception as e:
-        print("Style extraction error:", e)
         return "Reflective and poetic."
 
-def generate_character_and_plot(responses, style, genre, tone, mode):
+def generate_character_and_plot(responses, style_description, genre, tone, mode):
     formatted = "\n".join([f"Q: {q}\nA: {a}" for q, a in responses.items()])
-    background = "Make this character reflect the user's own identity." if mode == 'self' else "Create an original fictional character."
+    context = "The character should reflect the user’s personality and emotional tone." if mode == "self" else "Create a fully fictional character using the input below."
 
     prompt = f"""
-    Tone: {style}
+    Style: {style_description}
     Genre: {genre}
-    Desired tone: {tone}
-    {background}
+    Tone: {tone}
+    {context}
 
-    Responses:
+    Input:
     {formatted}
 
-    Create a fictional character profile and a 3–5 bullet point plotline.
-    Include name, age, background, strengths, weaknesses, and goals.
+    Write a fictional character profile followed by a 3-5 bullet point plotline. Include name, age, background, strengths, flaws, and motivation.
     """
     try:
         completion = client.chat.completions.create(
@@ -156,16 +146,17 @@ def generate_character_and_plot(responses, style, genre, tone, mode):
         )
         content = completion.choices[0].message.content.strip()
         parts = content.split("Plotline:")
-        return parts[0].strip(), parts[1].strip() if len(parts) > 1 else "Plot unavailable."
+        profile = parts[0].strip()
+        plot = parts[1].strip() if len(parts) > 1 else "No plotline provided."
+        return profile, plot
     except Exception as e:
-        print("Character generation error:", e)
-        return "Error creating character.", ""
+        return f"Error: {e}", ""
 
 def generate_blurb(profile, plot, genre):
     prompt = f"""
-    Write a 200-word story blurb in the {genre} genre.
+    Write a 200-word story blurb in the {genre} genre based on this character and plot.
 
-    Character Profile:
+    Profile:
     {profile}
 
     Plot:
@@ -180,8 +171,8 @@ def generate_blurb(profile, plot, genre):
         )
         return completion.choices[0].message.content.strip()
     except Exception as e:
-        print("Blurb generation error:", e)
-        return "Error generating blurb."
+        return f"Error: {e}"
 
+# === Run app ===
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=3000)
