@@ -85,7 +85,7 @@ def preferences():
         session['plot'] = plot
         session['genre'] = genre
 
-        return render_template('preview.html', profile=profile, plot=plot)
+        return render_template('character_preview.html', profile=profile, plot=plot)
 
     return render_template('preferences.html', genre_options=genre_options, tone_options=tone_options)
 
