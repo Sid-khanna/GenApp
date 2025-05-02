@@ -111,7 +111,7 @@ def extract_style(responses):
     """
     try:
         completion = client.chat.completions.create(
-            model="mistralai/mistral-7b-instruct:free",
+            model="qwen/qwen3-0.6b-04-28:free",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=200,
             temperature=0.7,
