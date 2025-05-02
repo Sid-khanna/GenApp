@@ -6,7 +6,7 @@ from openai import OpenAI
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "default-secret")  # needed for Flask session
-print("DEBUG — OPENROUTER_API_KEY:", os.getenv("OPENROUTER_API_KEY"))
+
 
 # === OpenRouter setup ===
 client = OpenAI(
@@ -17,7 +17,7 @@ client = OpenAI(
         "X-Title": "AI Character Creator",
     }
 )
-
+print("DEBUG — OPENROUTER_API_KEY:", os.getenv("OPENROUTER_API_KEY"))
 # === Core questions ===
 personality_questions = [
     "What is a memory that shaped who you are today?",
