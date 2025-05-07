@@ -110,23 +110,30 @@ def extract_style(responses):
     {formatted}
     """
     try:
-        completion = client.chat.completions.create(
+        stream = client.chat.completions.create(
             model="qwen/qwen3-0.6b-04-28:free",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=200,
             temperature=0.7,
+            stream=True
         )
-        return completion.choices[0].message.content.strip()
+        style = ""
+        for chunk in stream:
+            if hasattr(chunk.choices[0].delta, "content"):
+                style += chunk.choices[0].delta.content
+        return style.strip()
     except Exception as e:
         return "Reflective and poetic."
+
 
 def generate_character_and_plot(responses, style_description, genre, preferred_tone, mode):
     formatted = "\n".join([f"Q: {q}\nA: {a}" for q, a in responses.items()])
     
-    if mode == "self":
-        background_note = "The character should reflect the user's personality, values, and emotional style based on the personal reflections below."
-    else:
-        background_note = "The character should be created entirely from scratch, using the following user-provided character inspiration."
+    background_note = (
+        "The character should reflect the user's personality, values, and emotional style based on the personal reflections below."
+        if mode == "self" else
+        "The character should be created entirely from scratch, using the following user-provided character inspiration."
+    )
 
     prompt = f"""
     Using the tone: {style_description}
@@ -142,20 +149,27 @@ def generate_character_and_plot(responses, style_description, genre, preferred_t
     Include name, age, background, strengths, weaknesses, and goals.
     Then below it, provide the plotline.
     """
+
     try:
-        completion = client.chat.completions.create(
+        stream = client.chat.completions.create(
             model="mistralai/mistral-7b-instruct:free",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1000,
             temperature=0.85,
+            stream=True
         )
-        content = completion.choices[0].message.content.strip()
-        parts = content.split("Plotline:")
+        result = ""
+        for chunk in stream:
+            if hasattr(chunk.choices[0].delta, "content"):
+                result += chunk.choices[0].delta.content
+
+        parts = result.strip().split("Plotline:")
         character_profile = parts[0].strip()
         plot = parts[1].strip() if len(parts) > 1 else "No plotline generated."
         return character_profile, plot
     except Exception as e:
         return f"Error: {e}", ""
+
 
 def generate_blurb(profile, plot, genre):
     prompt = f"""
@@ -168,15 +182,21 @@ def generate_blurb(profile, plot, genre):
     {plot}
     """
     try:
-        completion = client.chat.completions.create(
+        stream = client.chat.completions.create(
             model="mistralai/mistral-7b-instruct:free",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=600,
             temperature=0.8,
+            stream=True
         )
-        return completion.choices[0].message.content.strip()
+        result = ""
+        for chunk in stream:
+            if hasattr(chunk.choices[0].delta, "content"):
+                result += chunk.choices[0].delta.content
+        return result.strip()
     except Exception as e:
         return f"Error: {e}"
+
 
 # Run the app (used for local only, Render uses gunicorn)
 if __name__ == '__main__':
